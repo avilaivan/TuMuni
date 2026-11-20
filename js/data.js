@@ -9,9 +9,9 @@
    Si la ficha oficial no publica un dato, la app lo dice (RN-03).
    ========================================================================== */
 
-const VERIFICADO = "11/2026";
-const OFICIAL = "https://www.lamatanza.gov.ar/";
-const F = (n) => `https://www.lamatanza.gov.ar/tramites/${n}/details`;
+const VERIFICADO = "20/11/2026";
+const OFICIAL = "https://lamatanza.gov.ar/";
+const F = (n) => `https://lamatanza.gov.ar/tramites/${n}/details`;
 
 /* Modalidades: una sola por trámite (RN-08) */
 const MODALIDADES = {
@@ -63,10 +63,10 @@ const LOCALIDADES = [
 const SJ = { lat: -34.682, lng: -58.560 };
 const SEDES = {
   // Tránsito / Licencias
-  "transito-tablada": { nombre: "Licencias · La Tablada", direccion: "Arieta y Asamblea, La Tablada", horario: "Lunes a viernes de 7 a 15:30 hs · con turno", tel: "4651-0101", lat: -34.689, lng: -58.526 },
+  "transito-tablada": { nombre: "Licencias · La Tablada", direccion: "Arieta y Asamblea, La Tablada", horario: "Lunes a viernes de 8 a 15 hs · con turno", tel: "4651-0101", lat: -34.689, lng: -58.526 },
   "transito-ramos":   { nombre: "Licencias · Ramos Mejía", direccion: null, horario: "Lunes a viernes de 8 a 14 hs", tel: "4651-0101", lat: -34.642, lng: -58.565 },
   "transito-catan":   { nombre: "Licencias · González Catán", direccion: null, horario: "Lunes a viernes de 8 a 14 hs", tel: "4651-0101", lat: -34.771, lng: -58.646 },
-  "dnrec":            { nombre: "Antecedentes penales (DNRec)", direccion: "Turnos en dnrec.jus.gov.ar o al 0800-666-0055", horario: "Teléfono de 7 a 18 hs", tel: "0800-666-0055", lat: -34.640, lng: -58.470, externo: true },
+  "dnrec":            { nombre: "Dirección General de Tránsito", direccion: "Av. Bergantín Don Juan Manuel de Rosas 3715, San Justo", horario: null, tel: "4651-0101", lat: -34.640, lng: -58.470, externo: true },
   "faltas":           { nombre: "Dirección de Faltas", direccion: "Entre Ríos 3058, 1º piso, San Justo", horario: "Lunes a viernes de 8:30 a 13:15 hs", tel: "4651-0101", lat: -34.679, lng: -58.561 },
 
   // Tasa por Servicios Generales / Recaudación
@@ -143,7 +143,7 @@ const AV_PANDEMIA = { tipo: "aviso", txt: "La ficha oficial dice que, por la pan
 const AV_TITULAR = { tipo: "info", txt: "Solo lo puede presentar el titular, su cónyuge o un gestor autorizado por el Colegio de Gestores. Otra persona necesita autorización ante escribano." };
 const TURNERO = {
   label: "Sacar turno en la web oficial", url: "https://turnostransito.lamatanza.gov.ar/", destino: "turnostransito.lamatanza.gov.ar",
-  tipo: "turnero", queHace: "El turno se saca en el turnero oficial de Tránsito y te lo confirman por mail."
+  tipo: "turnero", queHace: "El turno se saca en el turnero oficial de Tránsito. Te pide la localidad que figura en tu DNI y te confirma el turno por mail."
 };
 const EDAD_PART = { id: "edad", txt: "¿Cuántos años tenés?", ops: [["64", "Hasta 64"], ["65", "65 a 69"], ["70", "70 o más"]] };
 
@@ -163,8 +163,9 @@ const TRAMITES = [
     ayudaBoleta: true,
     costo: { texto: "Depende de tu propiedad: el monto figura en tu boleta.", nota: "TuMuni no cobra ni ve tus datos de pago." },
     acciones: [{ label: "Ir a pagar", url: "https://tsg.lamatanza.gov.ar/", destino: "tsg.lamatanza.gov.ar", tipo: "web", queHace: "El pago se hace en la web del Municipio.", pedira: ["Nº de padrón", "Fecha de vencimiento", "Tarjeta de crédito"] }],
+    descargas: [{ label: "¿Cómo realizo el pago? (tutorial oficial)", url: "https://lamatanza.gov.ar/economia/tutorial-boleta" }],
     secundaria: { label: "Recibir la boleta por email", tramite: "boleta-email" },
-    recordatorio: "tasa", fuente: "https://tsg.lamatanza.gov.ar/"
+    recordatorio: "tasa", fuente: "https://lamatanza.gov.ar/externos/tsg"
   },
   {
     id: "boleta-email", nombre: "Recibir la boleta por email", oficial: "Factura digital de la TSG",
@@ -175,7 +176,7 @@ const TRAMITES = [
     tenerAMano: ["Tu última boleta de la tasa (te van a pedir datos de ella)", "Un email que revises seguido"],
     costo: { texto: "Sin costo." },
     acciones: [{ label: "Adherirme a la boleta por email", url: "https://facturadigital.lamatanza.gov.ar/", destino: "facturadigital.lamatanza.gov.ar", tipo: "web", queHace: "La adhesión se hace en la web del Municipio.", pedira: ["Datos de tu boleta", "Tu email"] }],
-    fuente: "https://facturadigital.lamatanza.gov.ar/"
+    fuente: "https://lamatanza.gov.ar/externos/factura-digital"
   },
   {
     id: "cuotas-vencidas", nombre: "Pagar cuotas vencidas de la tasa", oficial: "Actualización de Cuotas Vencidas",
@@ -320,7 +321,8 @@ const TRAMITES = [
     sedes: ["transito-ramos", "transito-tablada", "transito-catan"],
     avisos: [AV_CANCELAR, AV_45, AV_GESTORES],
     acciones: [{ ...TURNERO, pedira: ["DNI", "Email para la confirmación", "Elegir sede, día y hora"] }],
-    recordatorio: "licencia", fuente: F(41)
+    recordatorio: "licencia", descargas: [{ label: "Declaración Jurada de Salud (PDF oficial)", url: "https://lamatanza.gov.ar/upload/files/DECLARACION-JURADA-OBLIGATORIA-DE-SALUD-3109682e-c_260601_134221-4b1c9f64-aa76-4a4c-86ec-d8b4e9d1510a.pdf" }],
+    fuente: F(41)
   },
   {
     id: "licencia-original", nombre: "Sacar la licencia por primera vez", oficial: "Licencia para conducir · Original clases A y B",
@@ -328,7 +330,7 @@ const TRAMITES = [
     resumen: "Desde $21.740 · requiere curso online ANSV",
     claves: "licencia registro carnet conducir primera vez original nueva sacar aprender joven",
     etapas: ["Hacer el curso ANSV", "Sacar turno", "Ir a la sede"],
-    pasoPrevio: { txt: "Hacé el curso obligatorio de la Agencia Nacional de Seguridad Vial e imprimí el certificado. Si tenés entre 16 y 21 años, además el curso “Mi Primera Licencia” en Mi Argentina.", url: "https://curso.seguridadvial.gob.ar/ansv", label: "Curso ANSV" },
+    pasoPrevio: { txt: "Hacé el curso obligatorio de la Agencia Nacional de Seguridad Vial e imprimí el certificado. Si tenés entre 16 y 21 años, el curso es “Mi Primera Licencia” en Mi Argentina.", links: [{ label: "Mi Primera Licencia (16 a 21 años)", url: "https://www.argentina.gob.ar/servicio/mi-primera-licencia" }, { label: "Link al curso en la ficha oficial", url: F(41) }] },
     preguntas: [{ id: "edad", txt: "¿Cuántos años tenés?", ops: [["joven", "16 a 21"], ["64", "22 a 64"], ["65", "65 a 69"], ["70", "70 o más"]] }],
     checklist: [
       { t: "DNI digitalizado con domicilio en La Matanza" },
@@ -344,6 +346,7 @@ const TRAMITES = [
     sedes: ["transito-ramos", "transito-tablada", "transito-catan"],
     avisos: [AV_CANCELAR, AV_45, { tipo: "info", txt: "Embarazadas: hasta las 24 semanas, con certificado del obstetra de embarazo sin riesgo. Insulinodependientes: certificado del médico tratante." }],
     acciones: [{ ...TURNERO, pedira: ["DNI", "Email", "Certificado del curso ANSV"] }],
+    descargas: [{ label: "Declaración Jurada de Salud (PDF oficial)", url: "https://lamatanza.gov.ar/upload/files/DECLARACION-JURADA-OBLIGATORIA-DE-SALUD-3109682e-c_260601_134221-4b1c9f64-aa76-4a4c-86ec-d8b4e9d1510a.pdf" }],
     fuente: F(41)
   },
   {
@@ -352,7 +355,7 @@ const TRAMITES = [
     resumen: "Taxi, remis, carga o pasajeros · desde $20.923",
     claves: "licencia profesional registro camion taxi remis colectivo carga pasajeros renovar",
     etapas: ["Pedir antecedentes penales", "Sacar turno", "Ir a la sede"],
-    pasoPrevio: { txt: "Pedí el certificado de antecedentes penales en el Registro Nacional de Reincidencia (vale 30 días corridos). Es un trámite nacional.", url: "https://www.dnrec.jus.gov.ar/", label: "Turnos DNRec" },
+    pasoPrevio: { txt: "Pedí el certificado de antecedentes penales en el Registro Nacional de Reincidencia (vale 30 días corridos). Es un trámite nacional.", links: [{ label: "Registro Nacional de Reincidencia", url: "https://www.argentina.gob.ar/justicia/reincidencia" }] },
     preguntas: [{ id: "edad", txt: "¿Cuántos años tenés?", ops: [["44", "Hasta 44"], ["45", "45 a 64"], ["65", "65 a 69"], ["70", "70 o más"]] }],
     checklist: [
       { t: "DNI digitalizado con domicilio en La Matanza" },
@@ -368,6 +371,7 @@ const TRAMITES = [
     sedes: ["transito-ramos", "transito-tablada", "transito-catan"],
     avisos: [{ tipo: "info", txt: "Las licencias profesionales que vencen entre el 1º de julio y el 31 de octubre de 2026 tienen una prórroga de 120 días." }, AV_CANCELAR, AV_45],
     acciones: [{ ...TURNERO, pedira: ["DNI", "Email", "Clase de licencia"] }],
+    descargas: [{ label: "Declaración Jurada de Salud (PDF oficial)", url: "https://lamatanza.gov.ar/upload/files/DECLARACION-JURADA-OBLIGATORIA-DE-SALUD-3109682e-c_260601_134221-4b1c9f64-aa76-4a4c-86ec-d8b4e9d1510a.pdf" }],
     fuente: F(41)
   },
   {
@@ -376,7 +380,7 @@ const TRAMITES = [
     resumen: "Entre 21 y 64 años · desde $21.199",
     claves: "ampliacion ampliar clase licencia profesional camion colectivo c d e registro",
     etapas: ["Curso ANSV y antecedentes", "Sacar turno", "Ir a la sede"],
-    pasoPrevio: { txt: "Hacé el curso obligatorio de la ANSV y pedí el certificado de antecedentes penales (vale 30 días). Son trámites nacionales.", url: "https://curso.seguridadvial.gob.ar/ansv", label: "Curso ANSV" },
+    pasoPrevio: { txt: "Hacé el curso obligatorio de la ANSV y pedí el certificado de antecedentes penales (vale 30 días). Son trámites nacionales.", links: [{ label: "Link al curso en la ficha oficial", url: F(41) }, { label: "Registro Nacional de Reincidencia", url: "https://www.argentina.gob.ar/justicia/reincidencia" }] },
     preguntas: [{ id: "edad", txt: "¿Cuántos años tenés?", ops: [["44", "21 a 44"], ["45", "45 a 64"]] }],
     checklist: [
       { t: "DNI digitalizado con domicilio en La Matanza" },
@@ -391,6 +395,7 @@ const TRAMITES = [
     costo: { porRespuesta: "edad", valores: { "44": "$21.740", "45": "$21.199" }, etiquetas: { "44": "21 a 44 años", "45": "45 años o más" }, desde: "Desde $21.199", nota: "Arancel de la ficha oficial." },
     sedes: ["transito-ramos", "transito-tablada", "transito-catan"],
     acciones: [{ ...TURNERO, pedira: ["DNI", "Email", "Certificados del curso y de antecedentes"] }],
+    descargas: [{ label: "Declaración Jurada de Salud (PDF oficial)", url: "https://lamatanza.gov.ar/upload/files/DECLARACION-JURADA-OBLIGATORIA-DE-SALUD-3109682e-c_260601_134221-4b1c9f64-aa76-4a4c-86ec-d8b4e9d1510a.pdf" }],
     fuente: F(41)
   },
   {
@@ -410,6 +415,7 @@ const TRAMITES = [
     sedes: ["transito-ramos", "transito-tablada", "transito-catan"],
     avisos: [AV_CANCELAR],
     acciones: [{ ...TURNERO, pedira: ["DNI", "Email", "Denuncia de robo o extravío"] }],
+    descargas: [{ label: "Declaración Jurada de Salud (PDF oficial)", url: "https://lamatanza.gov.ar/upload/files/DECLARACION-JURADA-OBLIGATORIA-DE-SALUD-3109682e-c_260601_134221-4b1c9f64-aa76-4a4c-86ec-d8b4e9d1510a.pdf" }],
     fuente: F(41)
   },
   {
@@ -431,6 +437,7 @@ const TRAMITES = [
     costo: { porRespuesta: "caso", valores: { datos: "$20.923", juris: "$20.923" }, etiquetas: { datos: "reemplazo", juris: "reemplazo" }, desde: "$20.923", nota: "Certificado de legalidad por cambio de jurisdicción: $3.565." },
     sedes: ["transito-ramos", "transito-tablada", "transito-catan"],
     acciones: [{ ...TURNERO, pedira: ["DNI", "Email", "Licencia actual"] }],
+    descargas: [{ label: "Declaración Jurada de Salud (PDF oficial)", url: "https://lamatanza.gov.ar/upload/files/DECLARACION-JURADA-OBLIGATORIA-DE-SALUD-3109682e-c_260601_134221-4b1c9f64-aa76-4a4c-86ec-d8b4e9d1510a.pdf" }],
     fuente: F(41)
   },
 
@@ -438,14 +445,17 @@ const TRAMITES = [
   {
     id: "multas", nombre: "Consultar mis multas de tránsito", oficial: "Consulta de infracciones",
     cat: "auto", mod: "online", masBuscado: 1,
-    resumen: "Hay que buscar en dos sistemas: el municipal y el provincial",
-    claves: "multas infracciones fotomulta transito deuda auto moto libre deuda faltas",
-    pasos: ["Buscá por DNI o por dominio en el sistema del municipio.", "Buscá también en el sistema provincial SACIT: ahí están las fotomultas desde mayo de 2017.", "Si necesitás el libre deuda de infracciones, se pide en la Dirección de Faltas ($300)."],
+    resumen: "El municipio indica buscar en dos sistemas",
+    claves: "multas infracciones fotomulta transito deuda auto moto libre deuda faltas acta",
+    pasos: ["Buscá por DNI o dominio en Infracciones BA: ahí están las fotomultas desde mayo de 2017 y las actas digitalizadas desde el 1° de julio de 2018.", "Buscá también en la web del municipio: actas manuales hasta el 30 de junio de 2018, alcoholemia, vehículos sin habilitación y abandonados.", "Si necesitás el libre deuda de infracciones, se pide en la Dirección de Faltas ($300)."],
     tenerAMano: ["DNI o dominio (patente) del vehículo"],
-    pasoPrevio: { txt: "Las fotomultas y actas digitalizadas están en el sistema de la Provincia de Buenos Aires (SACIT). TuMuni no lo gestiona.", url: "https://www.infraccionesba.gba.gob.ar/", label: "infraccionesba.gba.gob.ar" },
+    avisos: [{ tipo: "info", txt: "Puede haber infracciones en proceso que todavía no aparecen en la consulta." }],
     costo: { texto: "Consultar es gratis. Libre deuda de infracciones: $300." },
     sedes: ["faltas"],
-    acciones: [{ label: "Consultar multas del municipio", url: OFICIAL, destino: "consulta de infracciones en lamatanza.gov.ar", tipo: "web", queHace: "La consulta se hace en la web oficial del Municipio.", pedira: ["DNI o dominio del vehículo"] }],
+    acciones: [
+      { label: "Consultar en Infracciones BA", url: "https://infraccionesba.gba.gob.ar/", destino: "infraccionesba.gba.gob.ar", tipo: "externo", queHace: "Es el sistema de la Provincia que el municipio indica para fotomultas y actas desde 2018.", pedira: ["DNI o dominio del vehículo"] },
+      { label: "Consultar en la web del municipio", url: OFICIAL, destino: "lamatanza.gov.ar (consulta de infracciones)", tipo: "web", queHace: "En la página de inicio del Municipio está la consulta de actas anteriores a julio de 2018.", pedira: ["DNI o dominio del vehículo"] }
+    ],
     fuente: OFICIAL
   },
   {
@@ -453,11 +463,11 @@ const TRAMITES = [
     cat: "auto", mod: "online",
     resumen: "Autos y motos con patente municipal",
     claves: "patente deuda auto moto automotor impuesto consultar pagar",
-    pasos: ["Tocá “Consultar deuda” para ir a la web del municipio.", "Ingresá el dominio del vehículo.", "Para consultas, escribí a descentralizada.automotor@lamatanza.gov.ar (autos) o descentralizada.moto@gmail.com (motos)."],
-    tenerAMano: ["Dominio (patente) del vehículo"],
+    pasos: ["Tocá “Consultar deuda”: se abre el portal de Automotores del municipio.", "Elegí auto o moto e ingresá el dominio y el código verificador.", "Las boletas pagadas en el Banco de Cuentas (Monseñor Marcón 3133) se acreditan en el momento; por otros medios tardan más."],
+    tenerAMano: ["Dominio (patente) del vehículo", "Si es auto o moto"],
     costo: { texto: "Consultar es gratis." },
-    contacto: "Atención al público: 8:30 a 13 hs",
-    acciones: [{ label: "Consultar deuda", url: OFICIAL, destino: "Deuda de Patentes en lamatanza.gov.ar", tipo: "web", queHace: "La consulta se hace en la web oficial del Municipio.", pedira: ["Dominio del vehículo"] }],
+    contacto: "Consultas: descentralizada.automotor@lamatanza.gov.ar (autos) · descentralizada.moto@gmail.com (motos). Ojo: en la web oficial, el enlace del email de autos abre una dirección @gmail.com distinta; ante la duda, llamá al 4651-0101.",
+    acciones: [{ label: "Consultar deuda", url: "https://automotores.lamatanza.gov.ar/", destino: "automotores.lamatanza.gov.ar", tipo: "web", queHace: "La consulta se hace en el portal de Automotores del Municipio.", pedira: ["Auto o moto", "Dominio", "Código verificador"] }],
     fuente: OFICIAL
   },
   {
@@ -505,7 +515,7 @@ const TRAMITES = [
     avisos: [AV_TITULAR, AV_PANDEMIA],
     costo: { texto: null, faltante: "La ficha oficial no informa un costo." },
     sedes: ["descentralizada"],
-    acciones: [{ label: "Sacar turno en la web oficial", url: F(2), destino: "ficha oficial de Baja de Automotores", tipo: "turnero", queHace: "Según la ficha oficial, todas las bajas se hacen con turno pedido por la página del municipio.", pedira: ["DNI", "Dominio del vehículo"] }],
+    acciones: [{ label: "Sacar turno de Automotores", url: "https://automotoresturnos.lamatanza.gov.ar/", destino: "automotoresturnos.lamatanza.gov.ar", tipo: "turnero", queHace: "Es el turnero oficial de Automotores. Elegí bien el tipo de trámite: si no podés ir, cancelá o quedás 30 días sin poder sacar otro turno.", pedira: ["DNI", "Tipo de trámite", "Dominio", "Email y teléfono"] }],
     fuente: F(2)
   },
   {
@@ -1055,18 +1065,20 @@ const TRAMITES = [
     contacto: "Asesoramiento por email: Consumidores@lamatanza.gov.ar",
     acciones: [{ label: "Consultar por email", mail: "Consumidores@lamatanza.gov.ar", asunto: "Consulta Defensa del Consumidor", tipo: "email", destino: "Consumidores@lamatanza.gov.ar", queHace: "Se abre tu email para hacer una consulta de asesoramiento.", pedira: ["Tu consulta", "Datos de la empresa"] }],
     plantilla: ["Nombre y apellido: ____", "DNI: ____", "Empresa: ____", "Qué pasó: ____", "Qué pedís: ____"],
-    fuente: "https://www.lamatanza.gov.ar/defensa-consumidor"
+    fuente: "https://lamatanza.gov.ar/defensa-consumidor"
   },
   {
     id: "mtz-denuncias", nombre: "Denunciar un ilícito", oficial: "MTZ Denuncias",
     cat: "reclamos", mod: "distancia",
-    resumen: "Canal oficial de denuncias del municipio",
-    claves: "denuncia ilicito delito robo mtz denuncias seguridad",
-    pasos: ["Abrí el canal oficial de MTZ Denuncias.", "Contá qué pasó, dónde y cuándo."],
+    resumen: "WhatsApp anónimo, las 24 horas",
+    claves: "denuncia ilicito delito robo mtz denuncias seguridad droga desarmadero anonimo",
+    pasos: ["Abrí el WhatsApp oficial de MTZ Denuncias.", "Contá qué pasó, dónde y cuándo. Es anónimo y confidencial."],
+    plantilla: ["Qué pasa: ____ (venta de drogas, desarmadero, otro)", "Dirección o referencia: ____", "Localidad: ____", "Desde cuándo / horarios: ____"],
     avisos: [{ tipo: "error", txt: "<b>No reemplaza al 911.</b> Ante una emergencia, llamá al 911." }],
     costo: { texto: "Sin costo." },
-    acciones: [{ label: "Ir a MTZ Denuncias", url: "https://www.lamatanza.gov.ar/mtz-denuncias", destino: "lamatanza.gov.ar/mtz-denuncias", tipo: "web", queHace: "Ahí está el canal oficial de denuncias del Municipio.", pedira: ["Qué pasó, dónde y cuándo"] }],
-    fuente: "https://www.lamatanza.gov.ar/mtz-denuncias"
+    contacto: "WhatsApp 11 3630-4527 · las 24 horas, los 365 días del año.",
+    acciones: [{ label: "Abrir WhatsApp de denuncias", wa: "5491136304527", destino: "WhatsApp MTZ Denuncias · 11 3630-4527", tipo: "whatsapp", queHace: "Se abre WhatsApp con un mensaje modelo. Completalo y envialo vos. La denuncia es anónima.", pedira: ["Qué pasó, dónde y cuándo"] }],
+    fuente: "https://lamatanza.gov.ar/mtz-denuncias"
   },
 
   /* ============================ CEMENTERIOS ============================ */
@@ -1140,16 +1152,30 @@ const TRAMITES = [
   },
   {
     id: "gestion-judicial", nombre: "Sacar turno para gestión judicial", oficial: "Gestión judicial · turnos",
-    cat: "otros", mod: "turno",
-    resumen: "Turnero oficial del municipio",
+    cat: "otros", mod: "turno", incompleto: true,
+    resumen: "El link oficial de turnos hoy no funciona",
     claves: "judicial gestion juzgado turno oficio",
-    etapas: ["Preparar lo que llevás", "Sacar turno", "Ir a la sede"],
+    etapas: ["Preparar lo que llevás", "Pedir turno", "Ir a la sede"],
+    pasos: ["Llamá al 4651-0101 y pedí el turno para Gestión Judicial.", "Llevá tu DNI y la documentación de la causa."],
     checklist: [{ t: "DNI", n: "original y copia" }, { t: "Documentación del expediente o causa" }],
     costo: { texto: null, faltante: "El municipio no informa el monto." },
-    avisos: [{ tipo: "info", txt: "La sede y la documentación exacta figuran al sacar el turno." }],
-    sinSede: "La sede figura en la confirmación del turno.",
-    acciones: [{ label: "Ir al turnero oficial", url: OFICIAL, destino: "turnero de Gestión judicial en lamatanza.gov.ar", tipo: "turnero", queHace: "El turno se saca en el turnero oficial del Municipio.", pedira: ["DNI", "Email"] }],
+    avisos: [{ tipo: "aviso", txt: "<b>Revisamos el link “Gestión Judicial” de la web oficial:</b> hoy abre el sistema de Obras Particulares, que pide usuario y contraseña. Hasta que lo corrijan, pedí el turno por teléfono." }],
+    sinSede: "La ficha oficial no informa la sede. Confirmala al pedir el turno.",
+    acciones: [{ label: "Llamar al 4651-0101", url: "tel:01146510101", destino: "Municipio de La Matanza · 4651-0101", tipo: "tel", queHace: "Vas a llamar al conmutador del Municipio para pedir el turno.", pedira: ["DNI", "Datos de la causa"] }],
     fuente: OFICIAL
+  },
+  {
+    id: "estacionamiento-medido", nombre: "Cargar crédito de estacionamiento medido", oficial: "Estacionamiento Medido de La Matanza",
+    cat: "auto", mod: "presencial", incompleto: true,
+    resumen: "San Justo y Ramos Mejía · se carga en comercios",
+    claves: "estacionamiento medido estacionar parquimetro credito cargar san justo ramos mejia",
+    pasos: ["Buscá un comercio adherido en tu zona (kioscos, librerías, agencias de lotería).", "Cargá crédito con tu patente.", "Hay unos 45 comercios en San Justo y 11 en Ramos Mejía."],
+    checklist: [{ t: "Dominio (patente) del vehículo" }, { t: "Dinero para cargar crédito" }],
+    avisos: [{ tipo: "info", txt: "La web oficial publica la lista de comercios adheridos, pero no informa horarios, tarifas ni las calles de cada zona." }],
+    costo: { texto: null, faltante: "La web oficial no informa la tarifa." },
+    sinSede: "Se carga en comercios adheridos de San Justo y Ramos Mejía. La lista está en la web oficial.",
+    acciones: [{ label: "Ver comercios adheridos", url: "https://lamatanza.gov.ar/estacionamiento-medido", destino: "lamatanza.gov.ar/estacionamiento-medido", tipo: "fuente", queHace: "Vas a ver la lista oficial de comercios donde se carga crédito.", pedira: [] }],
+    fuente: "https://lamatanza.gov.ar/estacionamiento-medido"
   }
 ];
 

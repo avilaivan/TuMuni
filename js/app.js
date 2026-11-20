@@ -14,20 +14,30 @@
   "use strict";
 
   /* ---------------- Almacenamiento local (opcional, RN-13) ---------------- */
+  // Cada cuenta de prueba guarda sus datos aparte ("tm_u_<id>_clave"); sin sesión se usa "tm_clave".
+  const GLOBAL_KEYS = new Set(["user", "visto"]);
+  let currentUser = (() => { try { return JSON.parse(localStorage.getItem("tm_user")) || null; } catch (e) { return null; } })();
+  if (currentUser && !USUARIOS_DEMO.some((u) => u.id === currentUser)) currentUser = null;
+  const key = (k) => "tm_" + (GLOBAL_KEYS.has(k) || !currentUser ? "" : "u_" + currentUser + "_") + k;
   const store = {
-    get(k, def) { try { const v = localStorage.getItem("tm_" + k); return v === null ? def : JSON.parse(v); } catch (e) { return def; } },
-    set(k, v) { try { localStorage.setItem("tm_" + k, JSON.stringify(v)); } catch (e) { /* modo privado */ } },
-    del(k) { try { localStorage.removeItem("tm_" + k); } catch (e) {} }
+    get(k, def) { try { const v = localStorage.getItem(key(k)); return v === null ? def : JSON.parse(v); } catch (e) { return def; } },
+    set(k, v) { try { localStorage.setItem(key(k), JSON.stringify(v)); } catch (e) { /* modo privado */ } },
+    del(k) { try { localStorage.removeItem(key(k)); } catch (e) {} }
   };
-
-  const state = {
-    loc: store.get("loc", ""),
-    big: store.get("big", false),
-    saved: store.get("saved", {}),
-    recs: store.get("recs", []),
-    recent: store.get("recent", []),
-    session: {}
-  };
+  const DEFAULT_PREFS = { theme: "light", motion: false, big: false, tv: 2 }; /* tv: versión del tema. Por defecto, siempre modo claro */
+  const state = { loc: "", saved: {}, recs: [], recent: [], prefs: { ...DEFAULT_PREFS }, profile: null, session: {} };
+  function loadState() {
+    state.loc = store.get("loc", "");
+    state.saved = store.get("saved", {});
+    state.recs = store.get("recs", []);
+    state.recent = store.get("recent", []);
+    const rawPrefs = store.get("prefs", {});
+    state.prefs = { ...DEFAULT_PREFS, ...rawPrefs };
+    if (rawPrefs.tv !== 2) { state.prefs = { ...state.prefs, theme: "light", tv: 2 }; store.set("prefs", state.prefs); }
+    state.profile = currentUser ? store.get("profile", null) : null;
+    state.session = {};
+  }
+  loadState();
 
   /* ---------------- Íconos (SVG de trazo, iguales en todos los sistemas) ---------------- */
   const P = {
@@ -135,7 +145,9 @@
       }
     });
     results.sort((a, b) => b.score - a.score);
-    return { results: results.map((r) => r.t), toks, raw };
+    const top = results.length ? results[0].score : 0;
+    const kept = top >= 4 ? results.filter((r) => r.score >= top * 0.5) : results;
+    return { results: kept.map((r) => r.t), toks, raw };
   }
 
   function didYouMean(q) {
@@ -198,7 +210,7 @@
     const inside = sedes.filter((s) => !s.externo);
     if (!inside.length) return "";
     const box = { n: -34.62, s: -34.86, w: -58.72, e: -58.46 };
-    const pos = (lat, lng) => `left:${Math.min(92, Math.max(8, (lng - box.w) / (box.e - box.w) * 100)).toFixed(1)}%;top:${Math.min(90, Math.max(24, (lat - box.n) / (box.s - box.n) * 100 + 16)).toFixed(1)}%`;
+    const pos = (lat, lng) => `left:${Math.min(92, Math.max(8, (lng - box.w) / (box.e - box.w) * 100)).toFixed(1)}%;top:${Math.min(90, Math.max(32, (lat - box.n) / (box.s - box.n) * 100 + 16)).toFixed(1)}%`;
     const loc = LOCALIDADES.find((l) => l.id === state.loc);
     const pins = inside.slice(0, 6).map((s, i) => `<div class="map__pin" style="${pos(s.lat, s.lng)}"><b>${inside.length > 1 ? i + 1 : esc(s.nombre.split(" · ").pop())}</b><i></i></div>`).join("");
     const me = loc ? `<div class="map__pin me" style="${pos(loc.lat, loc.lng)}"><b>Vos</b><i></i></div>` : "";
@@ -279,10 +291,61 @@
   function paintLoc() { $("#loc-chip-txt").textContent = locName() || "Mi localidad"; $("#loc-chip").title = locName() ? "Tu localidad: " + locName() : "Elegí tu localidad"; }
   $("#loc-chip").addEventListener("click", () => locModal(false));
 
-  /* A+ */
-  function paintBig() { document.documentElement.classList.toggle("big", state.big); $("#aplus").setAttribute("aria-pressed", state.big); }
-  function toggleBig() { state.big = !state.big; store.set("big", state.big); paintBig(); toast(state.big ? "Texto grande activado" : "Texto normal"); const s = $("#sw-big"); if (s) s.setAttribute("aria-pressed", state.big); }
-  $("#aplus").addEventListener("click", toggleBig);
+  /* Tema claro / oscuro / automático y movimiento reducido (Personalización) */
+  const mqDark = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  function applyTheme() {
+    const t = state.prefs.theme;
+    const dark = t === "dark" || (t === "auto" && mqDark && mqDark.matches);
+    document.documentElement.dataset.theme = dark ? "dark" : "light";
+    document.documentElement.classList.toggle("reduce-motion", !!state.prefs.motion);
+    document.documentElement.classList.toggle("big-text", !!state.prefs.big);
+    const meta = $('meta[name="theme-color"]'); if (meta) meta.content = dark ? "#111827" : "#FFFFFF";
+  }
+  if (mqDark && mqDark.addEventListener) mqDark.addEventListener("change", () => { if (state.prefs.theme === "auto") applyTheme(); });
+  function savePrefs(patch) { state.prefs = { ...state.prefs, ...patch }; store.set("prefs", state.prefs); applyTheme(); }
+
+  /* Cuenta: avatar en la barra superior y en la barra inferior */
+  const initials = (p) => ((p.nombre || "?")[0] + (p.apellido || "")[0]).toUpperCase();
+  const avatar = (p, cls = "") => `<span class="avatar ${cls}" style="--av:${p.color || "#1F5FBF"}" aria-hidden="true">${esc(initials(p))}</span>`;
+  function paintAccount() {
+    const a = $("#acct"), p = state.profile;
+    a.innerHTML = p ? `${avatar(p, "avatar--sm")}<span class="acct__name">${esc(p.nombre)}</span>` : `<span class="acct__login">Ingresar</span>`;
+    a.setAttribute("aria-label", p ? `Tu cuenta: ${p.nombre} ${p.apellido}` : "Iniciar sesión");
+    a.setAttribute("href", p ? "#/perfil" : "#/ingresar");
+    const bn = $("#bn-cuenta");
+    bn.innerHTML = p ? `${avatar(p, "avatar--xs")}Mi cuenta` : `<span class="bn-ico bn-user" aria-hidden="true"></span>Ingresar`;
+    bn.setAttribute("href", p ? "#/perfil" : "#/ingresar");
+  }
+
+  /* Inicio y cierre de sesión con cuentas de prueba (MVP, sin servidor) */
+  function seedDemo(u) {
+    store.set("profile", { nombre: u.nombre, apellido: u.apellido, email: u.email, whatsapp: u.whatsapp, edad: u.edad, nacimiento: u.nacimiento, perfil: u.perfil, color: u.color, resumen: u.resumen, recomendados: u.recomendados });
+    store.set("loc", u.localidad);
+    store.set("saved", JSON.parse(JSON.stringify(u.saved)));
+    store.set("recs", JSON.parse(JSON.stringify(u.recs)));
+    store.set("prefs", { ...DEFAULT_PREFS, theme: u.tema });
+    store.set("recent", []);
+    store.set("seeded", true);
+  }
+  function login(id) {
+    const u = USUARIOS_DEMO.find((x) => x.id === id); if (!u) return;
+    currentUser = id;
+    try { localStorage.setItem("tm_user", JSON.stringify(id)); } catch (e) {}
+    if (!store.get("seeded", false)) seedDemo(u);
+    loadState(); applyTheme(); paintLoc(); paintAccount();
+    location.hash = "#/";
+    render();
+    toast(`¡Hola, ${state.profile.nombre}! Entraste con una cuenta de prueba.`);
+  }
+  function logout() {
+    const nombre = state.profile ? state.profile.nombre : "";
+    currentUser = null;
+    try { localStorage.removeItem("tm_user"); } catch (e) {}
+    loadState(); applyTheme(); paintLoc(); paintAccount();
+    location.hash = "#/";
+    render();
+    toast(nombre ? `Cerraste sesión. ¡Hasta pronto, ${nombre}!` : "Cerraste sesión.");
+  }
 
   /* Búsqueda de la barra superior (escritorio) */
   $("#topsearch").addEventListener("submit", (e) => { e.preventDefault(); const q = $("#topsearch-input").value.trim(); addRecent(q); location.hash = "#/buscar?q=" + encodeURIComponent(q); });
@@ -390,14 +453,17 @@
   function vInicio() {
     const top = TRAMITES.filter((t) => t.masBuscado).slice(0, 8);
     const sinVentanilla = TRAMITES.filter((t) => t.mod === "online" || t.mod === "distancia").length;
-    const proxRec = state.recs.filter((r) => r.fecha).sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
+    const today = new Date().toISOString().slice(0, 10);
+    const proxRec = state.recs.filter((r) => r.fecha && r.fecha >= today).sort((a, b) => a.fecha.localeCompare(b.fecha))[0];
     const venc = proxRec
-      ? `<div class="venc"><div class="venc__k">${esc(proxRec.label)}</div><div class="small">${fmtDate(proxRec.fecha)} · te avisamos 3 días antes</div><a href="#/mis-tramites">Ver mis recordatorios →</a></div>`
-      : `<div class="venc"><div class="venc__k">Tasa por Servicios Generales</div><div class="small">Cuota 11 · fecha según el <a href="#" data-ext="vencimientos" class="inline">calendario oficial</a></div><a href="#/tramite/pagar-tasa">Ver cómo pagar →</a></div>`;
+      ? `<div class="venc"><div class="venc__k">${esc(proxRec.label)}</div><div class="small">${fmtDate(proxRec.fecha)} · ${daysTo(proxRec.fecha)}</div><a href="#/mis-tramites">Ver mis recordatorios →</a></div>`
+      : `<div class="venc venc--empty"><div class="venc__k">No te olvides de nada</div><div class="small">Cargá la fecha de tu boleta de la tasa, de tu licencia o de un turno y te avisamos 3 días antes.</div></div>`;
+    const p = state.profile;
+    const para = p ? paraVos(p) : "";
     return `
       <section class="hero">
         <div class="hero__in">
-          <p class="hero__kicker">${ico("presencial")} Municipio de La Matanza · ${TRAMITES.length} trámites</p>
+          <p class="hero__kicker">${ico("presencial")} ${p ? `Hola, ${esc(p.nombre)} · ${esc(locName() || "La Matanza")}` : `Municipio de La Matanza · ${TRAMITES.length} trámites`}</p>
           <h1>¿Qué trámite necesitás?</h1>
           ${searchBox("", { big: true })}
           <div class="hero__chips" aria-label="Búsquedas frecuentes">
@@ -405,6 +471,7 @@
           </div>
         </div>
       </section>
+      ${para}
       <section class="section">
         <div class="section__head"><h2>Buscá por lo que necesitás</h2><a href="#/categorias">Ver todo →</a></div>
         ${catsGrid(false)}
@@ -425,6 +492,29 @@
           </div>
         </aside>
       </div>`;
+  }
+
+  function daysTo(iso) {
+    const d = Math.round((new Date(iso + "T12:00:00") - new Date(new Date().toISOString().slice(0, 10) + "T12:00:00")) / 86400000);
+    return d === 0 ? "es hoy" : d === 1 ? "falta 1 día" : `faltan ${d} días`;
+  }
+  // Sección personalizada para quien inició sesión
+  function paraVos(p) {
+    const enCurso = Object.keys(state.saved).filter(byId).slice(0, 3).map((id) => {
+      const t = byId(id), sv = state.saved[id];
+      const its = (t.checklist || []).filter((it) => condOk(it, sv.answers));
+      const done = its.filter((it) => sv.checked.includes(it.t)).length;
+      const pct = its.length ? Math.round(done / its.length * 100) : 0;
+      return `<a class="card mini cat--${t.cat}" href="#/tramite/${id}"><span class="result__ico">${ico(cat(t.cat).icon)}</span>
+        <span class="mini__body"><b>${esc(t.nombre)}</b><span class="small muted">${done} de ${its.length} listos</span>
+        <span class="progress"><span style="width:${pct}%"></span></span></span></a>`;
+    }).join("");
+    const reco = (p.recomendados || []).map(byId).filter(Boolean).filter((t) => !state.saved[t.id]).slice(0, 4);
+    return `<section class="section para-vos">
+      <div class="section__head"><h2>Para vos, ${esc(p.nombre)}</h2><a href="#/perfil">Mi cuenta →</a></div>
+      ${enCurso ? `<p class="eyebrow">Tus trámites en curso</p><div class="minis">${enCurso}</div>` : ""}
+      ${reco.length ? `<p class="eyebrow mt">Te pueden servir</p><div class="results-grid">${reco.map((t) => resultCard(t)).join("")}</div>` : ""}
+    </section>`;
   }
 
   // Categorías + gráfico comparativo
@@ -511,6 +601,7 @@
     const expand = extra.length ? `<p class="small muted">También buscamos: <b>${esc(extra.join(", "))}</b></p>` : "";
     const topCat = list.length ? cat(list[0].cat) : null;
     return `
+      <h1 class="sr">${q ? `Resultados para ${esc(q)}` : "Todos los trámites"}</h1>
       <div class="search-top">${searchBox(q, { autofocus: !q && !mod && !c })}</div>
       <div class="search-layout">
         <aside class="filters-side only-desk" aria-label="Filtros">
@@ -571,7 +662,8 @@
         ${fuenteHTML(t)}</div>`;
     }
 
-    const previo = t.pasoPrevio ? `<div class="block"><div class="paso-previo"><b>Paso previo (no municipal)</b>${esc(t.pasoPrevio.txt)}<br><a href="#" data-prev="${t.id}" class="ext">${esc(t.pasoPrevio.label)} </a></div></div>` : "";
+    const prevLinks = t.pasoPrevio ? (t.pasoPrevio.links || [{ label: t.pasoPrevio.label, url: t.pasoPrevio.url }]) : [];
+    const previo = t.pasoPrevio ? `<div class="block"><div class="paso-previo"><b>Paso previo (no municipal)</b>${esc(t.pasoPrevio.txt)}<div class="paso-previo__links">${prevLinks.map((l, i) => `<a href="#" data-prev="${i}" class="ext">${esc(l.label)} </a>`).join("")}</div></div></div>` : "";
     const incompleto = t.incompleto ? `<div class="block">${notice("aviso", "<b>Información incompleta en la web oficial.</b> El municipio no publica todos los requisitos, la sede o el horario de este trámite. Llamá al <a href='tel:01146510101'>4651-0101</a> o al <a href='tel:147'>147</a> antes de ir.")}</div>` : "";
 
     let preguntas = "";
@@ -647,13 +739,16 @@
     const isPres = t.mod === "presencial" || t.mod === "turno";
     const saved = !!state.saved[t.id];
     const acts = getActions(t);
+    // Jerarquía: una acción principal (azul), secundarias con borde y herramientas pequeñas
     let acciones = acts.map((a, i) => `<button type="button" class="btn${i ? " btn--outline" : ""}${a.tipo !== "tel" ? " ext" : ""}" data-act="${i}">${esc(a.label)} </button>`).join("");
+    if (t.checklist && !acts.length) acciones += `<button type="button" class="btn" data-save>${saved ? "✓ Guardado en Mis trámites" : "Guardar en Mis trámites"}</button>`;
     if (t.secundaria) acciones += `<a class="btn btn--outline" href="#/tramite/${t.secundaria.tramite}">${esc(t.secundaria.label)}</a>`;
-    if (t.checklist) {
-      acciones += `<button type="button" class="btn ${acts.length ? "btn--outline" : ""}" id="save">${saved ? "✓ Guardado en Mis trámites" : (isPres ? "Guardar en Mis trámites" : "Guardar checklist")}</button>`;
-      acciones += `<button type="button" class="btn btn--outline" id="share">Compartir por WhatsApp</button>`;
-    }
-    if (t.recordatorio) acciones += `<a class="btn btn--ghost" href="#/recordatorio?t=${t.id}">${ico("clock")} Activar recordatorio</a>`;
+    const tools = [];
+    if (t.checklist && acts.length) tools.push(`<button type="button" class="tool" data-save>${ico("otros")}<span>${saved ? "Guardado" : "Guardar"}</span></button>`);
+    if (t.checklist) tools.push(`<button type="button" class="tool" id="share">${ico("distancia")}<span>Compartir</span></button>`);
+    if (t.recordatorio || t.mod === "turno") tools.push(`<a class="tool" href="#/recordatorio?t=${t.id}">${ico("clock")}<span>Recordatorio</span></a>`);
+    const toolsHTML = tools.length ? `<div class="tools tools--${tools.length}">${tools.join("")}</div>` : "";
+    const descargas = t.descargas ? `<div class="descargas"><p class="eyebrow">Guías y formularios oficiales</p>${t.descargas.map((d, i) => `<a href="#" data-dl="${i}" class="descarga">${ico("otros")}<span>${esc(d.label)}</span><span aria-hidden="true">↗</span></a>`).join("")}</div>` : "";
 
     let sedes = "";
     const ids = sedeIds(t, w);
@@ -661,7 +756,7 @@
       const { sedes: list, cerca } = sortedSedes(ids);
       const m = mapHTML(list);
       sedes = `<div class="card"><h2>${list.length > 1 ? "Dónde se hace" : "Dónde y cuándo"}</h2>
-        ${m ? `<div class="mt-s">${m}</div>` : ""}
+        ${m ? `<div class="mt-s">${m}<p class="map__cap">Mapa ilustrativo: la ubicación exacta está en “Cómo llegar”.</p></div>` : ""}
         <div class="mt-s">${list.map((s, i) => `
           <div class="sede"><div class="sede__n">${!s.externo && list.length > 1 ? `<span class="sede__num">${i + 1}</span>` : ""}${esc(s.nombre)} ${cerca === s.id ? '<span class="tag-cerca">Más cerca</span>' : ""}</div>
             <div>${s.direccion ? esc(s.direccion) : '<span class="faltante">Dirección: la ficha oficial no la publica.</span>'}</div>
@@ -676,13 +771,21 @@
 
     const mainTop = `${head}${incompleto}${previo}${preguntas}${lista}${boleta}${plantilla}`;
     const mainBottom = `${avisos}${pasos}${fuenteHTML(t)}`;
-    const aside = `<div class="card card--sum"><div>${costo}</div><div class="btns mt">${acciones}</div>${contacto}</div>${sedes}`;
+    const aside = `<div class="card card--sum"><div>${costo}</div><div class="btns mt">${acciones}</div>${toolsHTML}${descargas}${contacto}</div>${sedes}`;
+
+    // Barra fija en el celular: la acción principal siempre a mano
+    const first = acts[0];
+    const barBtn = first ? `<button type="button" class="btn${first.tipo !== "tel" ? " ext" : ""}" data-act="0">${esc(first.label)} </button>`
+      : (t.checklist ? `<button type="button" class="btn" data-save>${saved ? "✓ Guardado" : "Guardar en Mis trámites"}</button>` : "");
+    const barCost = t.costo.porRespuesta ? (w.answers[t.costo.porRespuesta] ? t.costo.valores[w.answers[t.costo.porRespuesta]] : t.costo.desde) : (t.costo.texto && /^\$/.test(t.costo.texto) ? t.costo.texto : MODALIDADES[t.mod].corto);
+    const isMoneyBar = /^(Desde )?\$/.test(barCost);
+    const bar = barBtn ? `<div class="actionbar" role="region" aria-label="Acción principal"><div class="actionbar__info"><span class="small muted">${isMoneyBar ? "Cuánto cuesta" : "Cómo se hace"}</span><b>${esc(barCost)}</b></div>${barBtn}</div>` : "";
 
     return `<div class="ficha__grid ficha">
       <div class="ficha__main">${mainTop}</div>
       <aside class="aside">${aside}</aside>
       <div class="ficha__bottom">${mainBottom}</div>
-    </div>`;
+    </div>${bar}`;
   }
   function fuenteHTML(t) {
     return `<p class="fuente">Fuente: <a href="#" data-fuente="${t.id}">${esc(t.fuente.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""))}</a> · verificado ${VERIFICADO}. Los montos y horarios pueden cambiar: ante la duda, manda la web oficial.</p>`;
@@ -712,16 +815,24 @@
         else toast("Cuando termines, volvé a TuMuni.");
       });
     });
-    const prev = $("[data-prev]");
-    if (prev) prev.onclick = (e) => { e.preventDefault(); exitAlert({ tipo: "externo", url: t.pasoPrevio.url, destino: t.pasoPrevio.url.replace(/^https?:\/\//, ""), queHace: "Es un paso nacional o provincial: TuMuni no lo gestiona." }); };
+    $$("[data-prev]").forEach((a) => a.onclick = (e) => {
+      e.preventDefault();
+      const l = (t.pasoPrevio.links || [{ label: t.pasoPrevio.label, url: t.pasoPrevio.url }])[+a.dataset.prev];
+      const muni = /lamatanza\.gov\.ar/.test(l.url);
+      exitAlert({ tipo: muni ? "fuente" : "externo", url: l.url, destino: l.url.replace(/^https?:\/\//, ""), queHace: muni ? "Vas a la ficha oficial del Municipio, donde está el link al curso." : "Es un paso nacional o provincial: TuMuni no lo gestiona." });
+    });
+    $$("[data-dl]").forEach((a) => a.onclick = (e) => {
+      e.preventDefault(); const d = t.descargas[+a.dataset.dl];
+      exitAlert({ tipo: "fuente", url: d.url, destino: d.url.replace(/^https?:\/\//, "").split("/").slice(0, 3).join("/") + "…", queHace: "Es un documento oficial del Municipio de La Matanza." });
+    });
 
-    const sv = $("#save");
-    if (sv) sv.onclick = () => {
+    $$("[data-save]").forEach((sv) => sv.onclick = () => {
       if (state.saved[t.id]) { location.hash = "#/mis-tramites"; return; }
       state.saved[t.id] = { checked: w.checked.slice(), answers: { ...w.answers }, ts: Date.now() };
-      persist(); sv.textContent = "✓ Guardado en Mis trámites";
-      toast("Checklist guardado en Mis trámites. Se guarda en este dispositivo, sin registrarte.");
-    };
+      persist();
+      $$("[data-save]").forEach((b) => { const s = b.querySelector("span"); if (s) s.textContent = "Guardado"; else b.textContent = "✓ Guardado en Mis trámites"; });
+      toast(state.profile ? `Guardado en tu cuenta, ${state.profile.nombre}.` : "Guardado en Mis trámites, en este dispositivo y sin registrarte.");
+    });
     const sh = $("#share");
     if (sh) sh.onclick = () => {
       const items = visibleItems(t, w);
@@ -762,10 +873,11 @@
     }).join("");
     const recs = state.recs.map((r) => `<div class="card rec">
         <span class="rec__ico" aria-hidden="true">${ico("clock")}</span>
-        <div style="flex:1"><b>${esc(r.label)}</b><div class="small muted">${r.oficial ? "Según el calendario oficial de vencimientos" : (r.tipo === "turno" ? "Turno el " : r.tipo === "licencia" ? "Vence el " : "Fecha: ") + fmtDate(r.fecha)} · te avisamos 3 días antes por ${r.canal === "whatsapp" ? "WhatsApp" : "email"}</div></div>
+        <div style="flex:1"><b>${esc(r.label)}</b><div class="small muted">${r.fecha ? (r.tipo === "turno" ? "Turno el " : r.tipo === "otro" ? "Fecha: " : "Vence el ") + fmtDate(r.fecha) + " · " + daysTo(r.fecha) : "Sin fecha"} · te avisamos 3 días antes por ${r.canal === "whatsapp" ? "WhatsApp" : "email"}</div></div>
         <button class="icon-btn" type="button" data-delrec="${r.id}" aria-label="Borrar recordatorio">✕</button></div>`).join("");
     return `<div class="narrow">
-      <header class="page-head"><h1>Mis trámites</h1><p class="muted">Se guarda en este dispositivo. No necesitás registrarte.</p></header>
+      <header class="page-head"><h1>Mis trámites</h1><p class="muted">${state.profile ? `Cuenta de ${esc(state.profile.nombre)} ${esc(state.profile.apellido)} · se guarda en este navegador.` : "Se guarda en este dispositivo. No necesitás registrarte."}</p></header>
+      ${state.profile ? "" : `<div class="help-strip"><span>¿Querés ver un ejemplo con datos?</span><a href="#/ingresar"><b>Entrar con una cuenta de prueba →</b></a></div>`}
       <section class="section">
         <div class="section__head"><h2>Checklists guardados</h2></div>
         ${items || `<div class="card empty"><div class="empty__ico" aria-hidden="true">${ico("otros")}</div><b>Todavía no guardaste checklists</b><p class="small muted mt-s">En cualquier trámite presencial o con turno tocá “Guardar en Mis trámites”.</p><a class="btn btn--outline btn--auto mt" href="#/buscar">Buscar un trámite</a></div>`}
@@ -783,7 +895,7 @@
 
   // Formulario de recordatorio (máx. 4 campos · RN-14 / RN-15)
   const REC_TIPOS = [
-    { v: "tasa", l: "Tasa municipal (cuotas)", oficial: true, tramite: "pagar-tasa", label: "Tasa municipal" },
+    { v: "tasa", l: "Vencimiento de la tasa municipal", tramite: "pagar-tasa", label: "Tasa municipal" },
     { v: "licencia", l: "Vencimiento de mi licencia", tramite: "renovar-licencia", label: "Vence mi licencia de conducir" },
     { v: "turno", l: "Un turno que ya saqué", label: "Turno" },
     { v: "otro", l: "Otra fecha de un trámite", label: "Trámite" }
@@ -800,7 +912,6 @@
           <select id="r-tipo">${REC_TIPOS.map((r) => `<option value="${r.v}" ${r.v === pre ? "selected" : ""}>${r.l}</option>`).join("")}</select></div>
         <div class="field" id="f-fecha"><label for="r-fecha">Fecha</label><input id="r-fecha" type="date">
           <div class="field__help" id="fecha-help"></div></div>
-        <div class="field" id="oficial-note">${notice("info", "Usamos las fechas del <b>calendario oficial de vencimientos</b> del municipio. No tenés que cargar nada.")}</div>
         <div class="field"><span class="field__label" id="canal-l">Avisarme por</span>
           <div class="seg" role="group" aria-labelledby="canal-l">
             <button type="button" data-canal="whatsapp" aria-pressed="true">WhatsApp</button>
@@ -818,18 +929,21 @@
     const tipo = $("#r-tipo"), fecha = $("#r-fecha"), help = $("#fecha-help"), cont = $("#r-contacto");
     const sync = () => {
       const r = REC_TIPOS.find((x) => x.v === tipo.value);
-      $("#f-fecha").style.display = r.oficial ? "none" : "";
-      $("#oficial-note").style.display = r.oficial ? "" : "none";
-      help.textContent = r.v === "licencia" ? "La fecha de vencimiento que figura en tu licencia." : "";
+      help.textContent = r.v === "licencia" ? "La fecha de vencimiento que figura en tu licencia."
+        : r.v === "tasa" ? "La fecha está en tu boleta. La web oficial no publica el calendario 2026 de la tasa." : "";
     };
     tipo.onchange = sync; sync();
+    // Con sesión iniciada, completamos el contacto del perfil
+    const prof = state.profile;
+    const fillContact = () => { if (prof) cont.value = canal === "email" ? prof.email : prof.whatsapp; };
+    fillContact();
     $$("[data-canal]", f).forEach((b) => b.onclick = () => {
       canal = b.dataset.canal;
       $$("[data-canal]", f).forEach((x) => x.setAttribute("aria-pressed", x === b));
       $("#contacto-l").textContent = canal === "email" ? "Tu email" : "Tu número de WhatsApp";
       cont.type = canal === "email" ? "email" : "tel";
       cont.placeholder = canal === "email" ? "nombre@correo.com" : "Ej: 11 2345 6789";
-      cont.value = ""; clearErr($("#f-contacto"));
+      cont.value = ""; fillContact(); clearErr($("#f-contacto"));
     });
     function setErr(field, msg) { clearErr(field); field.classList.add("has-err"); field.insertAdjacentHTML("beforeend", `<div class="field__err" role="alert">${esc(msg)}</div>`); }
     function clearErr(field) { field.classList.remove("has-err"); const e = field.querySelector(".field__err"); if (e) e.remove(); }
@@ -857,14 +971,13 @@
   // Ayuda
   function vAyuda() {
     return `<div class="narrow">
-      <header class="page-head"><h1>Ayuda</h1><p class="muted">Teléfonos, accesibilidad y preguntas frecuentes.</p></header>
+      <header class="page-head"><h1>Ayuda</h1><p class="muted">Teléfonos útiles, ajustes y preguntas frecuentes.</p></header>
       <section class="section"><div class="section__head"><h2>Teléfonos útiles</h2></div>
         <div class="grid-2">${TELEFONOS.map((x) => `<a class="card tel" href="tel:${x.tel || x.num}"><span class="tel__n">${x.num}</span><span><b>${esc(x.nombre)}</b><br><span class="small muted">${esc(x.desc)}</span></span></a>`).join("")}</div>
       </section>
-      <section class="section"><div class="section__head"><h2>Accesibilidad</h2></div>
+      <section class="section"><div class="section__head"><h2>Ajustes</h2></div>
         <div class="grid-2">
-        <div class="card switch-row"><div><b>Texto más grande (A+)</b><div class="small muted">Agranda toda la app.</div></div>
-          <button type="button" class="btn btn--outline btn--auto btn--sm" id="sw-big" aria-pressed="${state.big}">A+</button></div>
+        <a class="card switch-row link-card" href="#/perfil/personalizacion"><div><b>Personalización</b><div class="small muted">Modo claro, oscuro o automático.</div></div><span class="chev" aria-hidden="true">›</span></a>
         <div class="card switch-row"><div><b>Mi localidad</b><div class="small muted">${locName() ? esc(locName()) : "Sin elegir · ves todas las sedes"}</div></div>
           <button type="button" class="btn btn--outline btn--auto btn--sm" data-locpick>Cambiar</button></div>
         </div>
@@ -874,17 +987,201 @@
       </section>
       <section class="section">
         ${notice("info", `TuMuni es un prototipo académico (UNLaM · Visualización e Interfaces). Incluye los ${TRAMITES.length} trámites de la Guía de Trámites de lamatanza.gov.ar, relevados en noviembre de 2026.`)}
-        <button type="button" class="btn btn--ghost mt" id="wipe">Borrar mis datos guardados</button>
+        <button type="button" class="btn btn--ghost mt" id="wipe">${currentUser ? "Restablecer la cuenta de prueba" : "Borrar mis datos guardados"}</button>
       </section></div>`;
   }
   function bindAyuda() {
-    const sb = $("#sw-big"); if (sb) sb.onclick = toggleBig;
     $$("[data-locpick]").forEach((b) => b.onclick = () => locModal(false));
     const wp = $("#wipe"); if (wp) wp.onclick = () => {
-      ["saved", "recs", "loc", "big", "visto", "recent"].forEach(store.del);
-      state.saved = {}; state.recs = []; state.loc = ""; state.big = false; state.session = {}; state.recent = [];
-      paintLoc(); paintBig(); render(); toast("Borramos tus datos de este dispositivo.");
+      ["saved", "recs", "loc", "recent", "prefs", "seeded", "profile"].forEach(store.del);
+      if (currentUser) { const u = USUARIOS_DEMO.find((x) => x.id === currentUser); seedDemo(u); }
+      loadState(); applyTheme(); paintLoc(); paintAccount(); render();
+      toast(currentUser ? "Restablecimos la cuenta de prueba a sus datos de ejemplo." : "Borramos tus datos de este dispositivo.");
     };
+  }
+
+
+  /* ---------------- Cuenta: iniciar sesión, perfil, editar y personalización ---------------- */
+  const locNombre = (id) => (LOCALIDADES.find((l) => l.id === id) || {}).nombre || "Sin elegir";
+
+  function vIngresar() {
+    if (state.profile) return vPerfil();
+    return `<div class="narrow">
+      <header class="page-head"><h1>Iniciar sesión</h1>
+      <p class="muted">Es opcional: TuMuni funciona igual sin cuenta. Con una cuenta, tus checklists, recordatorios y preferencias quedan juntos.</p></header>
+      <div class="login">
+        <section class="card login__demo">
+          <h2>Cuentas de prueba</h2>
+          <p class="small muted">Elegí un perfil para ver la app con datos de ejemplo.</p>
+          <div class="demo-list">
+            ${USUARIOS_DEMO.map((u) => `<button type="button" class="demo" data-demo="${u.id}">
+              ${avatar(u)}
+              <span class="demo__txt"><b>${esc(u.nombre)} ${esc(u.apellido)}</b><span class="small muted">${u.edad} años · ${esc(u.perfil)} · ${esc(locNombre(u.localidad))}</span><span class="small">${esc(u.resumen)}</span></span>
+              ${ico("arrow", "demo__arrow")}
+            </button>`).join("")}
+          </div>
+        </section>
+        <section class="card login__form">
+          <h2>Con email y contraseña</h2>
+          <form id="loginform" novalidate>
+            <div class="field" id="f-email"><label for="l-email">Email</label><input id="l-email" type="email" autocomplete="username" placeholder="nombre@correo.com"></div>
+            <div class="field" id="f-pass"><label for="l-pass">Contraseña</label>
+              <div class="pass"><input id="l-pass" type="password" autocomplete="current-password" placeholder="Tu contraseña"><button type="button" class="pass__toggle" id="l-show" aria-pressed="false">Mostrar</button></div></div>
+            <button class="btn mt" type="submit">Ingresar</button>
+          </form>
+          ${notice("info", `Para probar, usá el email de cualquier perfil (por ejemplo <b>marta.gomez@demo.tumuni</b>) y la contraseña <b>${DEMO_PASSWORD}</b>.`)}
+          <a class="btn btn--ghost mt-s" href="#/">Seguir sin cuenta</a>
+        </section>
+      </div></div>`;
+  }
+  function bindIngresar() {
+    $$("[data-demo]").forEach((b) => b.onclick = () => login(b.dataset.demo));
+    const f = $("#loginform"); if (!f) return;
+    const sh = $("#l-show");
+    sh.onclick = () => { const i = $("#l-pass"); const show = i.type === "password"; i.type = show ? "text" : "password"; sh.textContent = show ? "Ocultar" : "Mostrar"; sh.setAttribute("aria-pressed", show); };
+    const setErr = (fid, msg) => { const el = $(fid); el.classList.add("has-err"); el.insertAdjacentHTML("beforeend", `<div class="field__err" role="alert">${esc(msg)}</div>`); };
+    f.onsubmit = (e) => {
+      e.preventDefault();
+      $$(".field__err", f).forEach((x) => x.remove()); $$(".has-err", f).forEach((x) => x.classList.remove("has-err"));
+      const email = $("#l-email").value.trim().toLowerCase(), pass = $("#l-pass").value;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { setErr("#f-email", "Escribí un email válido, con @ y dominio."); $("#l-email").focus(); return; }
+      if (!pass) { setErr("#f-pass", "Escribí tu contraseña."); $("#l-pass").focus(); return; }
+      const u = USUARIOS_DEMO.find((x) => x.email === email);
+      if (!u || pass !== DEMO_PASSWORD) { setErr("#f-pass", "El email o la contraseña no coinciden con ninguna cuenta de prueba."); $("#l-pass").focus(); return; }
+      login(u.id);
+    };
+  }
+
+  function menuRow(href, icon, title, sub, extra = "") {
+    return `<a class="menu-row" href="${href}" ${extra}><span class="menu-row__ico">${ico(icon)}</span><span class="menu-row__txt"><b>${title}</b><span class="small muted">${sub}</span></span><span class="chev" aria-hidden="true">›</span></a>`;
+  }
+  function vPerfil() {
+    const p = state.profile;
+    const temaTxt = { light: "Modo claro", dark: "Modo oscuro", auto: "Automático (según tu dispositivo)" }[state.prefs.theme] + (state.prefs.big ? " · Letra grande" : "");
+    if (!p) {
+      return `<div class="narrow narrow--sm">
+        <header class="page-head"><h1>Mi cuenta</h1><p class="muted">No iniciaste sesión. Podés usar todo igual.</p></header>
+        <div class="card guest">
+          <div class="guest__ico">${ico("casa")}</div>
+          <div><b>Probá TuMuni con un perfil</b><p class="small muted">Entrá con una cuenta de prueba para ver checklists y recordatorios de ejemplo.</p></div>
+          <a class="btn" href="#/ingresar">Iniciar sesión</a>
+        </div>
+        <nav class="menu" aria-label="Opciones">
+          ${menuRow("#/perfil/personalizacion", "trend", "Personalización", temaTxt)}
+          ${menuRow("#", "presencial", "Mi localidad", esc(locName() || "Sin elegir"), "data-locpick")}
+          ${menuRow("#/mis-tramites", "otros", "Mis trámites", "Checklists y recordatorios")}
+          ${menuRow("#/ayuda", "reclamos", "Ayuda", "Teléfonos útiles y preguntas frecuentes")}
+        </nav>
+      </div>`;
+    }
+    const nSaved = Object.keys(state.saved).filter(byId).length;
+    return `<div class="narrow narrow--sm">
+      <header class="page-head"><h1>Mi cuenta</h1></header>
+      <section class="card profile">
+        ${avatar(p, "avatar--lg")}
+        <div class="profile__txt"><h2>${esc(p.nombre)} ${esc(p.apellido)}</h2>
+          <p class="small muted">${esc(p.email)}</p>
+          <p class="small">${p.edad} años · ${esc(p.perfil)} · ${esc(locName() || "Sin localidad")}</p></div>
+      </section>
+      <div class="stats3">
+        <a href="#/mis-tramites"><b>${nSaved}</b><span>checklists</span></a>
+        <a href="#/mis-tramites"><b>${state.recs.length}</b><span>recordatorios</span></a>
+        <a href="#/perfil/personalizacion"><b>${state.prefs.theme === "dark" ? "Oscuro" : state.prefs.theme === "light" ? "Claro" : "Auto"}</b><span>tema</span></a>
+      </div>
+      <nav class="menu" aria-label="Opciones de la cuenta">
+        ${menuRow("#/perfil/editar", "licencia", "Editar perfil", "Nombre, email, WhatsApp y localidad")}
+        ${menuRow("#/perfil/personalizacion", "trend", "Personalización", temaTxt)}
+        ${menuRow("#/mis-tramites", "otros", "Mis trámites", `${nSaved} guardados · ${state.recs.length} recordatorios`)}
+        ${menuRow("#/ayuda", "reclamos", "Ayuda", "Teléfonos útiles y preguntas frecuentes")}
+      </nav>
+      <button type="button" class="btn btn--danger mt" id="logout">Cerrar sesión</button>
+      <p class="small muted center mt-s">Cuenta de prueba · los datos se guardan solo en este navegador.</p>
+    </div>`;
+  }
+  function bindPerfil() {
+    const lo = $("#logout"); if (lo) lo.onclick = logout;
+    $$("[data-locpick]").forEach((b) => b.onclick = (e) => { e.preventDefault(); locModal(false); });
+  }
+
+  function vEditar() {
+    const p = state.profile;
+    if (!p) return vIngresar();
+    return `<div class="narrow narrow--sm">
+      <button class="back" type="button" data-back>‹ Volver</button>
+      <header class="page-head"><h1>Editar perfil</h1><p class="muted">Solo usamos estos datos para avisarte. Nunca te pedimos DNI, padrón ni patente.</p></header>
+      <form class="card form-card" id="editform" novalidate>
+        <div class="profile profile--inline">${avatar(p, "avatar--lg")}<p class="small muted">Tu avatar usa tus iniciales.</p></div>
+        <div class="field" id="e-nom"><label for="e-nombre">Nombre y apellido</label><input id="e-nombre" autocomplete="name" value="${esc(p.nombre + " " + p.apellido)}"></div>
+        <div class="field" id="e-mail"><label for="e-email">Email</label><input id="e-email" type="email" autocomplete="email" value="${esc(p.email)}"></div>
+        <div class="field" id="e-wa"><label for="e-whatsapp">WhatsApp</label><input id="e-whatsapp" type="tel" inputmode="tel" autocomplete="tel" value="${esc(p.whatsapp)}"><div class="field__help">Con código de área, sin 0 ni 15. Ej: 11 2345-6789</div></div>
+        <div class="field"><label for="e-loc">Localidad</label><select id="e-loc"><option value="">Sin elegir</option>${LOCALIDADES.map((l) => `<option value="${l.id}" ${state.loc === l.id ? "selected" : ""}>${esc(l.nombre)}</option>`).join("")}</select><div class="field__help">La usamos para mostrarte primero la sede más cercana.</div></div>
+        <div class="btns btns--row mt"><a class="btn btn--outline" href="#/perfil">Cancelar</a><button class="btn" type="submit">Guardar cambios</button></div>
+      </form></div>`;
+  }
+  function bindEditar() {
+    const f = $("#editform"); if (!f) return;
+    const setErr = (fid, msg) => { const el = $(fid); el.classList.add("has-err"); el.insertAdjacentHTML("beforeend", `<div class="field__err" role="alert">${esc(msg)}</div>`); };
+    f.onsubmit = (e) => {
+      e.preventDefault();
+      $$(".field__err", f).forEach((x) => x.remove()); $$(".has-err", f).forEach((x) => x.classList.remove("has-err"));
+      const nom = $("#e-nombre").value.trim().replace(/\s+/g, " "), email = $("#e-email").value.trim(), wa = $("#e-whatsapp").value.trim();
+      let ok = true;
+      if (nom.split(" ").length < 2) { setErr("#e-nom", "Escribí tu nombre y tu apellido."); ok = false; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { setErr("#e-mail", "Revisá el email: falta la @ o el dominio."); ok = false; }
+      if (!/^\d{8,13}$/.test(wa.replace(/[\s\-+()]/g, ""))) { setErr("#e-wa", "Escribí un número de 8 a 13 dígitos, con código de área."); ok = false; }
+      if (!ok) { const first = f.querySelector(".has-err input"); if (first) first.focus(); return; }
+      const parts = nom.split(" ");
+      state.profile = { ...state.profile, nombre: parts[0], apellido: parts.slice(1).join(" "), email, whatsapp: wa };
+      store.set("profile", state.profile);
+      const loc = $("#e-loc").value; state.loc = loc; store.set("loc", loc);
+      paintLoc(); paintAccount();
+      toast("Listo, guardamos tu perfil.");
+      location.hash = "#/perfil";
+    };
+  }
+
+  function vPersonalizacion() {
+    const th = state.prefs.theme;
+    const opt = (v, title, sub) => `<label class="theme-opt">
+      <input type="radio" name="theme" value="${v}" ${th === v ? "checked" : ""}>
+      <span class="theme-opt__card"><span class="theme-prev theme-prev--${v}" aria-hidden="true"><i></i><i></i><i></i></span>
+      <b>${title}</b><span class="small muted">${sub}</span></span></label>`;
+    return `<div class="narrow narrow--sm">
+      <button class="back" type="button" data-back>‹ Volver</button>
+      <header class="page-head"><h1>Personalización</h1><p class="muted">Elegí cómo querés ver TuMuni. Se aplica al instante${state.profile ? " y queda guardado en tu cuenta" : ""}.</p></header>
+      <section class="card form-card">
+        <h2>Tema</h2>
+        <div class="theme-opts" role="radiogroup" aria-label="Tema">
+          ${opt("light", "Claro", "Fondo blanco")}
+          ${opt("dark", "Oscuro", "Cansa menos de noche")}
+          ${opt("auto", "Automático", "Igual que tu dispositivo")}
+        </div>
+      </section>
+      <section class="card form-card mt">
+        <h2>Tamaño de letra</h2>
+        <label class="switch"><span><b>Letra más grande</b><span class="small muted">Agranda un poco todo el texto de la app. Tocá de nuevo para volver al tamaño normal.</span></span>
+          <input type="checkbox" id="p-big" ${state.prefs.big ? "checked" : ""}><span class="switch__ui" aria-hidden="true"></span></label>
+      </section>
+      <section class="card form-card mt">
+        <h2>Movimiento</h2>
+        <label class="switch"><span><b>Reducir animaciones</b><span class="small muted">Quita los efectos de movimiento al abrir ventanas y listas.</span></span>
+          <input type="checkbox" id="p-motion" ${state.prefs.motion ? "checked" : ""}><span class="switch__ui" aria-hidden="true"></span></label>
+      </section>
+      <section class="card form-card mt">
+        <h2>Ubicación</h2>
+        <div class="switch-row"><div><b>Mi localidad</b><div class="small muted">${esc(locName() || "Sin elegir · ves todas las sedes")}</div></div>
+          <button type="button" class="btn btn--outline btn--auto btn--sm" data-locpick>Cambiar</button></div>
+      </section>
+    </div>`;
+  }
+  function bindPersonalizacion() {
+    $$('input[name="theme"]').forEach((r) => r.onchange = () => {
+      savePrefs({ theme: r.value });
+      toast({ light: "Modo claro activado", dark: "Modo oscuro activado", auto: "El tema sigue a tu dispositivo" }[r.value]);
+    });
+    const bg = $("#p-big"); if (bg) bg.onchange = () => { savePrefs({ big: bg.checked }); toast(bg.checked ? "Letra más grande activada" : "Letra en tamaño normal"); };
+    const m = $("#p-motion"); if (m) m.onchange = () => { savePrefs({ motion: m.checked }); toast(m.checked ? "Animaciones reducidas" : "Animaciones activadas"); };
+    $$("[data-locpick]").forEach((b) => b.onclick = () => locModal(false));
   }
 
   function vNotFound() {
@@ -910,6 +1207,12 @@
       case "mis-tramites": html = vMis(); nav = "mis"; bind = bindMis; title = "Mis trámites · TuMuni"; break;
       case "recordatorio": html = vRecordatorio(params); nav = "mis"; bind = () => bindRecordatorio(params); title = "Nuevo recordatorio · TuMuni"; break;
       case "ayuda": html = vAyuda(); nav = "ayuda"; bind = bindAyuda; title = "Ayuda · TuMuni"; break;
+      case "ingresar": html = vIngresar(); nav = "cuenta"; bind = bindIngresar; title = "Iniciar sesión · TuMuni"; break;
+      case "perfil":
+        if (parts[1] === "editar") { html = vEditar(); bind = bindEditar; title = "Editar perfil · TuMuni"; }
+        else if (parts[1] === "personalizacion") { html = vPersonalizacion(); bind = bindPersonalizacion; title = "Personalización · TuMuni"; }
+        else { html = vPerfil(); bind = bindPerfil; title = "Mi cuenta · TuMuni"; }
+        nav = "cuenta"; break;
       default: html = vNotFound();
     }
     closeSuggest = null;
@@ -917,6 +1220,7 @@
     document.title = title;
     document.body.classList.toggle("has-topsearch", r !== "" && r !== "buscar");
     document.body.dataset.route = r || "inicio";
+    document.body.classList.toggle("has-actionbar", !!view.querySelector(".actionbar"));
     $$("[data-nav]").forEach((a) => a.classList.toggle("active", a.dataset.nav === nav));
     $$("[data-back]").forEach((b) => b.onclick = () => { if (history.length > 1) history.back(); else location.hash = "#/"; });
     $$("[data-recent]").forEach((a) => a.addEventListener("click", () => addRecent(a.dataset.recent)));
@@ -924,15 +1228,11 @@
       e.preventDefault(); const t = byId(a.dataset.fuente);
       exitAlert({ tipo: "fuente", url: t.fuente, destino: t.fuente.replace(/^https?:\/\//, ""), queHace: "Vas a ver la ficha oficial del Municipio con la información completa." });
     });
-    $$("[data-ext='vencimientos']").forEach((a) => a.onclick = (e) => {
-      e.preventDefault();
-      exitAlert({ tipo: "fuente", url: "https://www.lamatanza.gov.ar/vencimientos", destino: "lamatanza.gov.ar/vencimientos", queHace: "Vas a ver el calendario oficial de vencimientos del Municipio." });
-    });
     if (bind) bind();
   }
 
   window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); view.focus({ preventScroll: true }); });
 
-  paintLoc(); paintBig(); render();
+  applyTheme(); paintLoc(); paintAccount(); render();
   if (!store.get("visto", false) && !/[?&]nointro/.test(location.search)) setTimeout(() => locModal(true), 400);
 })();

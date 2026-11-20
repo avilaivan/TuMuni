@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1F5FBF">
+  <meta name="theme-color" content="#FFFFFF">
+  <meta name="color-scheme" content="light dark">
   <meta name="description" content="TuMuni La Matanza: todos los trámites del Municipio de La Matanza, en lenguaje de vecino. Qué llevar, cuánto cuesta y dónde se hace.">
   <title>TuMuni La Matanza · Todos tus trámites en un solo lugar</title>
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
@@ -11,6 +12,18 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
+  <script>
+    /* Aplica el tema guardado antes de pintar, para que no parpadee */
+    (function () {
+      try {
+        var u = JSON.parse(localStorage.getItem("tm_user") || "null");
+        var p = JSON.parse(localStorage.getItem(u ? "tm_u_" + u + "_prefs" : "tm_prefs") || "{}");
+        var t = p.theme || "auto";
+        var dark = t === "dark" || (t === "auto" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.dataset.theme = dark ? "dark" : "light";
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <a class="skip" href="#view">Saltar al contenido</a>
@@ -41,7 +54,7 @@
         <span id="loc-chip-txt">Mi localidad</span>
         <span aria-hidden="true">▾</span>
       </button>
-      <button class="aplus" id="aplus" type="button" aria-pressed="false" title="Agrandar el texto">A+</button>
+      <a class="acct" id="acct" href="#/ingresar" data-nav="cuenta"><span class="acct__login">Ingresar</span></a>
     </div>
   </header>
 
@@ -59,7 +72,7 @@
     <a href="#/" data-nav="inicio"><span class="bn-ico bn-home" aria-hidden="true"></span>Inicio</a>
     <a href="#/buscar" data-nav="buscar"><span class="bn-ico bn-search" aria-hidden="true"></span>Buscar</a>
     <a href="#/mis-tramites" data-nav="mis"><span class="bn-ico bn-list" aria-hidden="true"></span>Mis trámites</a>
-    <a href="#/ayuda" data-nav="ayuda"><span class="bn-ico bn-help" aria-hidden="true"></span>Ayuda</a>
+    <a href="#/perfil" data-nav="cuenta" id="bn-cuenta"><span class="bn-ico bn-user" aria-hidden="true"></span>Ingresar</a>
   </nav>
 
   <!-- Modal genérico (Materialize: modal) -->
@@ -71,6 +84,7 @@
   <div class="toasts" id="toasts" aria-live="assertive"></div>
 
   <script src="js/data.js"></script>
+  <script src="js/usuarios.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
