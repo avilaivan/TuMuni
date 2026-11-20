@@ -487,7 +487,9 @@ a.card.result { display: flex; }
 .collapsible details p { padding: 0 16px 16px; color: var(--muted); font-size: var(--fs-md); }
 .tel { display: flex; align-items: center; gap: 14px; }
 a.card.tel { display: flex; }
-.tel__n { font-size: 1.3rem; font-weight: 800; color: var(--action); min-width: 64px; white-space: nowrap; }
+.tel__n { font-size: 1.3rem; font-weight: 800; color: var(--action); min-width: 64px; white-space: nowrap; flex-shrink: 0; }
+.tel > span:last-child { min-width: 0; }
+.tel__n--long { font-size: 1.05rem; }
 .grid-2 .card + .card { margin-top: 0; }
 .switch-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 

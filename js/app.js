@@ -563,7 +563,7 @@
     if (q) {
       info = search(q); base = info.results;
       const first = norm(q).split(" ")[0];
-      if (!base.length && FUERA[first]) fuera = FUERA[first];
+      if (FUERA[first]) fuera = FUERA[first];
     } else base = TRAMITES.slice();
     const byCat = c ? base.filter((t) => t.cat === c) : base;
     const list = mod ? byCat.filter((t) => t.mod === mod) : byCat;
@@ -613,6 +613,7 @@
         <div class="search-main">
           <div class="chips only-mob" aria-label="Filtrar por modalidad">${modChips}</div>
           <div class="result-head"><p role="status">${titulo}</p>${expand}</div>
+          ${fuera ? notice("info", `<b>${esc(fuera)}</b> TuMuni solo incluye trámites del Municipio de La Matanza. Abajo están los trámites municipales que lo mencionan.`) : ""}
           <div class="results-grid">${list.length ? list.map((t) => resultCard(t, { showCat: true, q })).join("") : notice("info", "No hay trámites con ese filtro. <a href='" + link("", c) + "'>Ver todos</a>")}</div>
           ${topCat && q ? `<div class="help-strip mt"><span>¿No es lo que buscabas?</span><a href="#/categoria/${topCat.id}"><b>Ver todo “${esc(topCat.nombre)}” →</b></a></div>` : ""}
         </div>
@@ -973,7 +974,7 @@
     return `<div class="narrow">
       <header class="page-head"><h1>Ayuda</h1><p class="muted">Teléfonos útiles, ajustes y preguntas frecuentes.</p></header>
       <section class="section"><div class="section__head"><h2>Teléfonos útiles</h2></div>
-        <div class="grid-2">${TELEFONOS.map((x) => `<a class="card tel" href="tel:${x.tel || x.num}"><span class="tel__n">${x.num}</span><span><b>${esc(x.nombre)}</b><br><span class="small muted">${esc(x.desc)}</span></span></a>`).join("")}</div>
+        <div class="grid-2">${TELEFONOS.map((x) => `<a class="card tel" href="tel:${x.tel || x.num}"><span class="tel__n${String(x.num).length > 4 ? " tel__n--long" : ""}">${x.num}</span><span><b>${esc(x.nombre)}</b><br><span class="small muted">${esc(x.desc)}</span></span></a>`).join("")}</div>
       </section>
       <section class="section"><div class="section__head"><h2>Ajustes</h2></div>
         <div class="grid-2">
